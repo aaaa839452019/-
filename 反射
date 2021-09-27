@@ -6,6 +6,10 @@ https://github.com/JiMuzz/Android-Architecture
 
 
 
+https://blog.csdn.net/harvic880925/article/details/50072739
+
+
+
 
 反射可以修改final类型成员变量吗？
 final我们应该都知道，修饰变量的时候代表是一个常量，不可修改。那利用反射能不能达到修改的效果呢？
