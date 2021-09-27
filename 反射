@@ -1,0 +1,202 @@
+https://mp.weixin.qq.com/s/oKiIAwVyPjmUGt6M6jyk6w
+https://www.cnblogs.com/jimuzz/p/14297042.html
+https://www.jianshu.com/p/ab8812342658
+
+https://github.com/JiMuzz/Android-Architecture
+
+
+
+
+反射可以修改final类型成员变量吗？
+final我们应该都知道，修饰变量的时候代表是一个常量，不可修改。那利用反射能不能达到修改的效果呢？
+
+我们先试着修改一个用final修饰的String变量。
+
+public class User {
+    private final String name = "Bob";
+    private final Student student = new Student();
+    
+    public String getName() {
+        return name;
+    }
+
+    public Student getStudent() {
+        return student;
+    }
+}
+
+
+    User user = new User();
+    Class clz = User.class;
+    Field field1 = null;
+    try{
+        field1=clz.getDeclaredField("name");
+        field1.setAccessible(true);
+        field1.set(user,"xixi");
+        System.out.println(user.getName());
+    }catch(NoSuchFieldException e){
+        e.printStackTrace();
+    }catch(IllegalAccessException e){
+        e.printStackTrace();
+    }
+
+打印出来的结果，还是Bob，也就是没有修改到。
+
+我们再修改下student变量试试：
+
+field1 = clz.getDeclaredField("student");
+field1.setAccessible(true);
+field1.set(user, new Student());
+
+打印：
+修改前com.example.studynote.reflection.Student@77459877
+修改后com.example.studynote.reflection.Student@72ea2f77
+可以看到，对于正常的对象变量即使被final修饰也是可以通过反射进行修改的。
+
+这是为什么呢？为什么String不能被修改，而普通的对象变量可以被修改呢？
+
+先说结论，其实String值也被修改了，只是我们无法通过这个对象获取到修改后的值。
+
+这就涉及到JVM的内联优化了：
+
+内联函数，编译器将指定的函数体插入并取代每一处调用该函数的地方（上下文），从而节省了每次调用函数带来的额外时间开支。
+
+简单的说，就是JVM在处理代码的时候会帮我们优化代码逻辑，比如上述的final变量，已知final修饰后不会被修改，所以获取这个变量的时候就直接帮你在编译阶段就给赋值了。
+
+所以上述的getName方法经过JVM编译内联优化后会变成：
+
+    public String getName() {
+        return "Bob";
+    }
+所以无论怎么修改，都获取不到修改后的值。
+
+有的朋友可能提出直接获取name呢？比如这样：
+
+//修改为public
+public final String name = "Bob";
+
+//反射修改后，打印user.name
+field1=clz.getDeclaredField("name");
+field1.setAccessible(true);
+field1.set(user,"xixi");
+System.out.println(user.name);
+不好意思，还是打印出来Bob。这是因为System.out.println(user.name)这一句在经过编译后，会被写成：
+
+System.out.println(user.name)
+
+//经过内联优化
+
+System.out.println("Bob")
+
+所以：
+
+「反射是可以修改final变量的，但是如果是基本数据类型或者String类型的时候，无法通过对象获取修改后的值，因为JVM对其进行了内联优化。」
+
+那有没有办法获取修改后的值呢？
+
+有，可以通过反射中的Field.get(Object obj)方法获取：
+
+//获取field对应的变量在user对象中的值
+System.out.println("修改后"+field.get(user));
+反射获取static静态变量
+说完了final，再说说static，怎么修改static修饰的变量呢？
+
+我们知道，静态变量是在类的实例化之前就进行了初始化（类的初始化阶段），所以静态变量是跟着类本身走的，跟具体的对象无关，所以我们获取变量就不需要传入对象，直接传入null即可：
+
+public class User {
+ public static String name;
+}
+
+
+field2 = clz.getDeclaredField("name");
+field2.setAccessible(true);
+//获取静态变量
+Object getname=field2.get(null);
+System.out.println("修改前"+getname);
+
+//修改静态变量
+field2.set(null, "xixi");
+System.out.println("修改后"+User.name);
+如上述代码：
+
+Field.get(null) 可以获取静态变量。
+Field.set(null,object) 可以修改静态变量。
+怎么提升反射效率
+1、缓存重复用到的对象
+利用缓存，其实我不说大家也都知道，在平时项目中用到多次的对象也会进行缓存，谁也不会多次去创建。
+
+但是，这一点在反射中尤为重要，比如Class.forName方法，我们做个测试：
+
+    long startTime = System.currentTimeMillis();
+    Class clz = Class.forName("com.example.studynote.reflection.User");
+    User user;
+    int i = 0;
+    while (i < 1000000) {
+        i++;
+        //方法1，直接实例化
+        user = new User();
+        //方法2，每次都通过反射获取class，然后实例化
+        user = (User) Class.forName("com.example.studynote.reflection.User").newInstance();
+        //方法3，通过之前反射得到的class进行实例化
+        user = (User) clz.newInstance();
+    }
+
+    System.out.println("耗时：" + (System.currentTimeMillis() - startTime));
+打印结果：
+
+1、直接实例化
+耗时：15
+
+2、每次都通过反射获取class，然后实例化
+耗时：671
+
+3、通过之前反射得到的class进行实例化
+耗时：31
+所以看出来，只要我们合理的运用这些反射方法，比如Class.forName，Constructor，Method，Field等，尽量在循环外就缓存好实例，就能提高反射的效率，减少耗时。
+
+2、setAccessible(true)
+之前我们说过当遇到私有变量和方法的时候，会用到setAccessible(true)方法关闭安全检查。这个安全检查其实也是耗时的。
+
+所以我们在反射的过程中可以尽量调用setAccessible(true)来关闭安全检查，无论是否是私有的，这样也能提高反射的效率。
+
+3、ReflectASM
+ReflectASM 是一个非常小的 Java 类库，通过代码生成来提供高性能的反射处理，自动为 get/set 字段提供访问类，访问类使用字节码操作而不是 Java 的反射技术，因此非常快。
+
+ASM是一个通用的Java字节码操作和分析框架。它可以用于修改现有类或直接以二进制形式动态生成类。
+
+简单的说，这是一个类似反射，但是不同于反射的高性能库。他的原理是通过ASM库，生成了一个新的类，然后相当于直接调用新的类方法，从而完成反射的功能。
+
+感兴趣的可以去看看源码，实现原理比较简单——https://github.com/EsotericSoftware/reflectasm。
+
+「小总结：」经过上述三种方法，我想反射也不会那么可怕到大大影响性能的程度了，如果真的发现反射影响了性能以及实际使用的情况，也许可以研究下，是否是因为没用对反射和没有处理好反射相关的缓存呢？
+
+反射原理
+如果我们试着查看这些反射方法的源码，会发现最终都会走到native方法中，比如
+
+getDeclaredField方法会走到
+
+ public native Field getDeclaredField(String name) throws NoSuchFieldException;
+那么在底层，是怎么获取到类的相关信息的呢？
+
+首先回顾下JVM加载Java文件的过程：
+
+编译阶段，.java文件会被编译成.class文件，.class文件是一种二进制文件，内容是JVM能够识别的机器码。
+.class文件里面依次存储着类文件的各种信息，比如：版本号、类的名字、字段的描述和描述符、方法名称和描述、是不是public、类索引、字段表集合，方法集合等等数据。
+然后，JVM中的类加载器会读取字节码文件，取出二进制数据，加载到内存中，并且解析.class文件的信息。
+类加载器会获取类的二进制字节流，在内存中生成代表这个类的java.lang.Class对象。
+最后会开始类的生命周期，比如连接、初始化等等。
+而反射，就是去操作这个 java.lang.Class对象，这个对象中有整个类的结构，包括属性方法等等。
+
+总结来说就是，.class是一种有顺序的结构文件,而Class对象就是对这种文件的一种表示，所以我们能从Class对象中获取关于类的所有信息，这就是反射的原理。
+
+说点无关本文的
+最近有一些关于文章中分析源码部分的想法，以前总想把源码原封不动的搬上来，好让大家线下也能找到相关的源码然后通读。
+
+但是可能这样不大现实？而且也造成了很多朋友读文章的障碍，很可能当时一知半解，下来全部忘记，至少我就是这样的哈哈。
+
+所以可能在写文章中涉及到源码解析部分，尽量精简写出来，或者直接贴上伪代码能更方便大家理解吧～
+
+以后试一试。
+
+
+
