@@ -231,3 +231,37 @@ gradle.buildFinished {
 
 
 
+首先我们要搞懂 Action 这个概念，Action 本质上是一个执行动作，它只有在我们执行当前 Task 时才会被执行，Gradle 执行阶段本质上就是在执行每个 Task 中的一系列 Action
+doFirst，doLast 是 Task 给我们提供的两个 Action
+doFirst 表示：Task 执行最开始时被调用的 Action
+doLast 表示： task 执行完时被调用的 Action
+值的注意的是：doFirst 和 doLast 可被多次添加执行 
+Gradle 配置阶段，除 Task 的 Action 中编写的代码都会被执行
+
+通常我们会使用 doFirst 与 doLast 在 Task 执行期间进行相关操作，下面我们就来实现 build 任务执行期间耗时：
+
+// Task 执行实战：计算 build 执行期间的耗时
+def startBuildTime, endBuildTime
+// 1、在 Gradle 配置阶段完成之后进行操作，
+// 以此保证要执行的 task 配置完毕
+this.afterEvaluate { Project project ->
+    // 2、找到当前 project 下第一个执行的 task，即 preBuild task
+    def preBuildTask = project.tasks.getByName("preBuild")
+    preBuildTask.doFirst {
+        // 3、获取第一个 task 开始执行时刻的时间戳
+        startBuildTime = System.currentTimeMillis()
+    }
+    // 4、找到当前 project 下最后一个执行的 task，即 build task
+    def buildTask = project.tasks.getByName("build")
+    buildTask.doLast {
+        // 5、获取最后一个 task 执行完成前一瞬间的时间戳
+        endBuildTime = System.currentTimeMillis()
+        // 6、输出 build 执行期间的耗时
+        println "Current project execute time is ${endBuildTime - startBuildTime}"
+    }
+}
+
+
+
+
+
